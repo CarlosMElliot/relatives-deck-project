@@ -15,6 +15,8 @@ function App(){
   const[section,setSection]=useState(0);
   const[showReview,setShowReview]=useState(true);
   const[reason,setReason]=useState('');
+  const[logState,setLogState]=useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const[logMessage,setLogMessage]=useState('');
 
   const sections=[...new Set(questions.map(q=>q.part))];
   const currentPart=sections[section];
@@ -24,8 +26,10 @@ function App(){
   const answered=Object.keys(ans).length;
 
   const logAttempt=async(finalReason:string)=>{
+    setLogState('saving');
+    setLogMessage('Saving result...');
     try{
-      await fetch('/api/log-result',{
+      const response=await fetch('/api/log-result',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -38,14 +42,21 @@ function App(){
           submittedAt:new Date().toISOString()
         })
       });
-    }catch{}
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||('Logging failed with HTTP '+response.status));
+      setLogState('saved');
+      setLogMessage('✓ Result saved to the class log.');
+    }catch(e){
+      setLogState('error');
+      setLogMessage('Result was NOT saved: '+(e instanceof Error?e.message:'Unknown logging error'));
+    }
   };
 
-  const submit=(why='Submitted by student')=>{
+  const submit=async(why='Submitted by student')=>{
     setReason(why);
-    void logAttempt(why);
     setPhase('done');
     window.scrollTo({top:0,behavior:'smooth'});
+    await logAttempt(why);
   };
 
   useEffect(()=>{
@@ -116,6 +127,7 @@ function App(){
       <div className="eyebrow">RESULTS</div>
       <h1>{score}/100</h1>
       <p><b>{name}</b> · {correct} correct of {questions.length} · {reason}</p>
+      <p className={'log-status '+logState}>{logMessage||'Preparing result log...'}</p>
       <div className="result-actions">
         <button className="secondary" onClick={()=>setShowReview(v=>!v)}>{showReview?'Hide answer review':'Show answer review'}</button>
         <button className="primary" onClick={()=>location.reload()}>Take again</button>
